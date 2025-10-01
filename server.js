@@ -4,7 +4,6 @@ const cors = require('cors');
 const { Pool } = require('pg'); // PostgreSQL
 require('dotenv').config();
 
-
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -15,7 +14,7 @@ app.use(express.json());
 // --- 3. CONEXÃO COM O BANCO DE DADOS POSTGRESQL ---
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
+  ssl: { rejectUnauthorized: false } // necessário para Render/Postgres remoto
 });
 
 pool.connect()
@@ -23,6 +22,7 @@ pool.connect()
   .catch(err => console.error('❌ Erro ao conectar ao PostgreSQL:', err));
 
 // --- 4. ROTAS DA API ---
+
 // Clientes
 app.get('/api/clientes', async (req, res) => {
   try {
@@ -135,7 +135,7 @@ app.get('/api/historico', async (req, res) => {
       vendas.push({
         ...venda,
         itens: itensResult.rows,
-        data_venda: venda.data_venda.toISOString()
+        data_venda: new Date(venda.data_venda).toISOString()
       });
     }
 
@@ -149,10 +149,13 @@ app.get('/api/historico', async (req, res) => {
 // Sumário de faturamento
 app.get('/api/sumario', async (req, res) => {
   try {
-    const [diaResult] = await pool.query(
-      `SELECT COALESCE(SUM(valor_total),0) as total FROM registros_vendas WHERE DATE(data_venda) = CURRENT_DATE`
+    const diaResult = await pool.query(
+      `SELECT COALESCE(SUM(valor_total),0) as total 
+       FROM registros_vendas 
+       WHERE DATE(data_venda) = CURRENT_DATE`
     );
-    const [mesResult] = await pool.query(
+
+    const mesResult = await pool.query(
       `SELECT COALESCE(SUM(valor_total),0) as total 
        FROM registros_vendas 
        WHERE EXTRACT(YEAR FROM data_venda) = EXTRACT(YEAR FROM CURRENT_DATE)
@@ -160,8 +163,8 @@ app.get('/api/sumario', async (req, res) => {
     );
 
     res.json({
-      faturamentoDia: diaResult.rows ? diaResult.rows[0].total : 0,
-      faturamentoMes: mesResult.rows ? mesResult.rows[0].total : 0
+      faturamentoDia: diaResult.rows[0].total,
+      faturamentoMes: mesResult.rows[0].total
     });
   } catch (error) {
     console.error(error);
@@ -171,6 +174,5 @@ app.get('/api/sumario', async (req, res) => {
 
 // --- 5. INICIALIZAÇÃO DO SERVIDOR ---
 app.listen(PORT, () => {
-  console.log(`🚀 Servidor rodando em http://localhost:${PORT}`);
+  console.log(`🚀 Servidor rodando na porta ${PORT}`);
 });
-
