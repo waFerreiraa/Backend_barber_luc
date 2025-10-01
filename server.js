@@ -13,9 +13,14 @@ app.use(express.json());
 
 // --- 3. CONEXÃO COM O BANCO DE DADOS POSTGRESQL ---
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false } // necessário para Render/Postgres remoto
+  user: 'postgres',                       // seu usuário
+  password: 'Tropa190314@',               // sua senha normal, sem codificação
+  host: 'db.viltdxuuyerlsctfhgfb.supabase.co', // host do Supabase
+  port: 5432,                             // porta
+  database: 'postgres',                   // nome do banco
+  ssl: { rejectUnauthorized: false }      // necessário para Supabase
 });
+
 
 pool.connect()
   .then(() => console.log('✅ Conectado com sucesso ao PostgreSQL!'))
