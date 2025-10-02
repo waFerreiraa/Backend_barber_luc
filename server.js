@@ -180,7 +180,6 @@ app.post('/api/vendas', autenticar, async (req, res) => {
 });
 
 // Histórico de vendas (admin vê todos, usuário comum só os próprios)
-// Histórico de vendas (admin vê todos, usuário comum só os próprios)
 app.get('/api/historico', autenticar, async (req, res) => {
   try {
     let query = supabase.from('registros_vendas').select(`
@@ -189,47 +188,36 @@ app.get('/api/historico', autenticar, async (req, res) => {
       data_venda,
       usuario_id,
       usuarios!inner(nome),
-      clientes!inner(nome)
+      clientes!inner(nome),
+      venda_itens(
+        id,
+        valor_cobrado,
+        tipos_servicos!inner(nome)
+      )
     `).order('data_venda', { ascending: false });
 
     if (req.usuario.tipo_usuario !== 'admin') {
-      query = query.eq('usuario_id', req.usuario.id);
+      query = query.eq('usuario_id', req.usuario.id); // 🔹 FILTRA PELO USUÁRIO
     }
 
-    const { data: vendas, error: vendasError } = await query;
-    if (vendasError) throw vendasError;
+    const { data, error } = await query;
+    if (error) throw error;
 
-    const historico = [];
+    // 🔁 Formata a resposta para incluir `usuario_nome` e `cliente_nome` direto no objeto
+    const vendasFormatadas = data.map(v => ({
+      ...v,
+      usuario_nome: v.usuarios?.nome || null,
+      cliente_nome: v.clientes?.nome || null
+    }));
 
-    for (const venda of vendas) {
-      const { data: itens, error: itensError } = await supabase
-        .from('venda_itens')
-        .select('id, valor_cobrado, tipos_servicos!inner(nome)')
-        .eq('venda_id', venda.id);
-
-      if (itensError) throw itensError;
-
-      historico.push({
-        id: venda.id,
-        valor_total: venda.valor_total,
-        data_venda: venda.data_venda,
-        usuario_id: venda.usuario_id,
-        usuario_nome: venda.usuarios.nome,  // ✅ Aqui vem o nome do colaborador
-        cliente_nome: venda.clientes.nome,
-        itens: itens.map(i => ({
-          id: i.id,
-          valor_cobrado: i.valor_cobrado,
-          servico_nome: i.tipos_servicos.nome
-        }))
-      });
-    }
-
-    res.json(historico);
+    // ✅ Agora enviamos APENAS essa resposta
+    res.json(vendasFormatadas);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erro ao buscar histórico.' });
   }
 });
+
 
 
 // Sumário de faturamento
