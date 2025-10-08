@@ -5,6 +5,7 @@ require("dotenv").config();
 const { createClient } = require("@supabase/supabase-js");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const PDFDocument = require("pdfkit");
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -171,10 +172,10 @@ app.post("/api/tipos_servicos", autenticar, async (req, res) => {
   if (!nome || !valor_padrao) return res.status(400).json({ error: "Nome e valor são obrigatórios." });
 
   try {
-    const dataCriacao = brasiliaISOString();
+   
     const { data, error } = await supabase
       .from("tipos_servicos")
-      .insert([{ nome, valor_padrao, created_at: dataCriacao }])
+      .insert([{ nome, valor_padrao, }])
       .select();
     if (error) throw error;
     res.status(201).json(data[0]);
@@ -346,6 +347,89 @@ app.delete("/api/vendas/:id/excluir-cliente", autenticar, async (req, res) => {
     res.status(500).json({ error: "Erro ao excluir venda/cliente." });
   }
 });
+
+// --- 📄 Gerar Relatório de Ganhos em PDF ---
+// Gera PDF de ganhos filtrado por mês e ano
+app.get("/api/relatorio-ganhos", autenticar, async (req, res) => {
+  try {
+    const mes = Number(req.query.mes);   // 1-12
+    const ano = Number(req.query.ano);
+
+    if (!mes || !ano) {
+      return res.status(400).json({ error: "Informe mês e ano válidos" });
+    }
+
+    // Busca vendas filtrando por usuário se não for admin
+    let query = supabase
+      .from("registros_vendas")
+      .select(`
+        id,
+        valor_total,
+        data_venda,
+        usuarios!inner(nome),
+        clientes!inner(nome)
+      `)
+      .order("data_venda", { ascending: true });
+
+    if (req.usuario.tipo_usuario !== "admin") {
+      query = query.eq("usuario_id", req.usuario.id);
+    }
+
+    const { data: vendas, error } = await query;
+    if (error) throw error;
+
+    // Filtra vendas pelo mês e ano
+    const vendasFiltradas = vendas.filter(v => {
+      const data = new Date(v.data_venda);
+      return data.getMonth() + 1 === mes && data.getFullYear() === ano;
+    });
+
+    // Cria PDF
+    const PDFDocument = require("pdfkit");
+    const doc = new PDFDocument({ margin: 50 });
+    
+    let filename = `Relatorio_Ganhos_${mes}_${ano}.pdf`;
+    filename = encodeURIComponent(filename);
+
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader("Content-Type", "application/pdf");
+
+    // Cabeçalho
+    doc.fontSize(18).text("Barbearia Lucão", { align: "center" });
+    doc.moveDown();
+    doc.fontSize(14).text(`Relatório de Ganhos - ${mes}/${ano}`, { align: "center" });
+    doc.moveDown();
+
+    // Tabela
+    doc.fontSize(12);
+    let totalGeral = 0;
+
+    vendasFiltradas.forEach((v, index) => {
+      const dataBR = new Date(v.data_venda).toLocaleDateString("pt-BR");
+      const nomeCliente = v.clientes?.nome || "Cliente";
+      const nomeUsuario = v.usuarios?.nome || "Colaborador";
+      const valor = Number(v.valor_total).toFixed(2);
+
+      totalGeral += Number(v.valor_total);
+
+      doc.text(
+        `${index + 1}. ${dataBR} - ${nomeCliente} - ${nomeUsuario} - R$ ${valor}`
+      );
+    });
+
+    doc.moveDown();
+    doc.fontSize(14).text(`Total Geral: R$ ${totalGeral.toFixed(2)}`, { align: "right" });
+
+    doc.end();
+    doc.pipe(res);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao gerar relatório." });
+  }
+});
+
+
 
 
 // --- 7. INICIALIZAÇÃO DO SERVIDOR ---
