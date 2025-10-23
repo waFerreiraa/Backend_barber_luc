@@ -58,14 +58,23 @@ function brasiliaISOString() {
 app.post("/api/usuarios", async (req, res) => {
   const { nome, email, senha, tipo_usuario } = req.body;
   if (!nome || !email || !senha)
-    return res.status(400).json({ error: "Nome, email e senha são obrigatórios" });
+    return res
+      .status(400)
+      .json({ error: "Nome, email e senha são obrigatórios" });
 
   const hashSenha = await bcrypt.hash(senha, 10);
 
   try {
     const { data, error } = await supabase
       .from("usuarios")
-      .insert([{ nome, email, senha: hashSenha, tipo_usuario: tipo_usuario || "colaborador" }])
+      .insert([
+        {
+          nome,
+          email,
+          senha: hashSenha,
+          tipo_usuario: tipo_usuario || "colaborador",
+        },
+      ])
       .select();
 
     if (error) throw error;
@@ -85,24 +94,35 @@ app.post("/api/usuarios", async (req, res) => {
 // Login
 app.post("/api/login", async (req, res) => {
   const { email, senha } = req.body;
-  if (!email || !senha) return res.status(400).json({ error: "Email e senha obrigatórios" });
+
+  if (!email || !senha) {
+    return res.status(400).json({ error: "Email e senha obrigatórios" });
+  }
 
   try {
+    // Busca usuário pelo email
     const { data: usuarioData, error } = await supabase
       .from("usuarios")
       .select("*")
       .eq("email", email)
       .single();
 
-    if (error || !usuarioData) return res.status(401).json({ error: "Usuário não encontrado" });
+    if (error || !usuarioData) {
+      return res.status(401).json({ error: "Email ou senha incorretos" });
+    }
 
+    // Compara senha usando bcrypt nativo
     const senhaCorreta = await bcrypt.compare(senha, usuarioData.senha);
-    if (!senhaCorreta) return res.status(401).json({ error: "Senha incorreta" });
 
+    if (!senhaCorreta) {
+      return res.status(401).json({ error: "Email ou senha incorretos" });
+    }
+
+    // Gera token JWT
     const token = jwt.sign(
       { id: usuarioData.id, tipo_usuario: usuarioData.tipo_usuario },
       process.env.JWT_SECRET,
-      { expiresIn: "8h" }
+      { expiresIn: "30d" }
     );
 
     res.json({
@@ -113,7 +133,7 @@ app.post("/api/login", async (req, res) => {
     });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Erro ao logar" });
+    res.status(500).json({ error: "Erro ao tentar logar" });
   }
 });
 
@@ -169,13 +189,13 @@ app.get("/api/tipos_servicos", autenticar, async (req, res) => {
 
 app.post("/api/tipos_servicos", autenticar, async (req, res) => {
   const { nome, valor_padrao } = req.body;
-  if (!nome || !valor_padrao) return res.status(400).json({ error: "Nome e valor são obrigatórios." });
+  if (!nome || !valor_padrao)
+    return res.status(400).json({ error: "Nome e valor são obrigatórios." });
 
   try {
-   
     const { data, error } = await supabase
       .from("tipos_servicos")
-      .insert([{ nome, valor_padrao, }])
+      .insert([{ nome, valor_padrao }])
       .select();
     if (error) throw error;
     res.status(201).json(data[0]);
@@ -189,26 +209,37 @@ app.post("/api/tipos_servicos", autenticar, async (req, res) => {
 app.post("/api/vendas", autenticar, async (req, res) => {
   const { cliente_id, valor_total, itens } = req.body;
   if (!cliente_id || !valor_total || !itens || itens.length === 0)
-    return res.status(400).json({ error: "Dados incompletos para registrar a venda." });
+    return res
+      .status(400)
+      .json({ error: "Dados incompletos para registrar a venda." });
 
   try {
     const dataVenda = brasiliaISOString(); // horário de Brasília
 
     const { data: vendaData, error: vendaError } = await supabase
       .from("registros_vendas")
-      .insert([{ cliente_id, usuario_id: req.usuario.id, valor_total, data_venda: dataVenda }])
+      .insert([
+        {
+          cliente_id,
+          usuario_id: req.usuario.id,
+          valor_total,
+          data_venda: dataVenda,
+        },
+      ])
       .select();
     if (vendaError) throw vendaError;
 
     const vendaId = vendaData[0].id;
 
-    const itensInsert = itens.map(item => ({
+    const itensInsert = itens.map((item) => ({
       venda_id: vendaId,
       servico_id: item.servico_id,
-      valor_cobrado: item.valor_cobrado
+      valor_cobrado: item.valor_cobrado,
     }));
 
-    const { error: itensError } = await supabase.from("venda_itens").insert(itensInsert);
+    const { error: itensError } = await supabase
+      .from("venda_itens")
+      .insert(itensInsert);
     if (itensError) throw itensError;
 
     res.status(201).json({ message: "Venda registrada com sucesso!", vendaId });
@@ -223,7 +254,8 @@ app.get("/api/historico", autenticar, async (req, res) => {
   try {
     let query = supabase
       .from("registros_vendas")
-      .select(`
+      .select(
+        `
         id,
         valor_total,
         data_venda,
@@ -235,10 +267,12 @@ app.get("/api/historico", autenticar, async (req, res) => {
           valor_cobrado,
           tipos_servicos!inner(nome)
         )
-      `)
+      `
+      )
       .order("data_venda", { ascending: false });
 
-    if (req.usuario.tipo_usuario !== "admin") query = query.eq("usuario_id", req.usuario.id);
+    if (req.usuario.tipo_usuario !== "admin")
+      query = query.eq("usuario_id", req.usuario.id);
 
     const { data, error } = await query;
     if (error) throw error;
@@ -262,7 +296,8 @@ app.get("/api/sumario", autenticar, async (req, res) => {
     let query = supabase
       .from("registros_vendas")
       .select("valor_total, data_venda");
-    if (req.usuario.tipo_usuario !== "admin") query = query.eq("usuario_id", req.usuario.id);
+    if (req.usuario.tipo_usuario !== "admin")
+      query = query.eq("usuario_id", req.usuario.id);
 
     const { data: vendas, error } = await query;
     if (error) throw error;
@@ -270,14 +305,18 @@ app.get("/api/sumario", autenticar, async (req, res) => {
     const hojeBR = new Date(brasiliaISOString());
 
     const faturamentoDia = vendas
-      .filter(v => new Date(v.data_venda).toDateString() === hojeBR.toDateString())
+      .filter(
+        (v) => new Date(v.data_venda).toDateString() === hojeBR.toDateString()
+      )
       .reduce((acc, v) => acc + Number(v.valor_total), 0);
 
     const faturamentoMes = vendas
-      .filter(v => {
+      .filter((v) => {
         const dataVenda = new Date(v.data_venda);
-        return dataVenda.getMonth() === hojeBR.getMonth() &&
-               dataVenda.getFullYear() === hojeBR.getFullYear();
+        return (
+          dataVenda.getMonth() === hojeBR.getMonth() &&
+          dataVenda.getFullYear() === hojeBR.getFullYear()
+        );
       })
       .reduce((acc, v) => acc + Number(v.valor_total), 0);
 
@@ -300,10 +339,14 @@ app.delete("/api/vendas/:id/excluir-cliente", autenticar, async (req, res) => {
       .eq("id", id)
       .single();
 
-    if (vendaError || !venda) return res.status(404).json({ error: "Venda não encontrada." });
+    if (vendaError || !venda)
+      return res.status(404).json({ error: "Venda não encontrada." });
 
     // Permissão: não-admin só pode deletar suas próprias vendas
-    if (req.usuario.tipo_usuario !== "admin" && venda.usuario_id !== req.usuario.id) {
+    if (
+      req.usuario.tipo_usuario !== "admin" &&
+      venda.usuario_id !== req.usuario.id
+    ) {
       return res.status(403).json({ error: "Acesso negado." });
     }
 
@@ -341,7 +384,9 @@ app.delete("/api/vendas/:id/excluir-cliente", autenticar, async (req, res) => {
       if (clienteDeleteError) throw clienteDeleteError;
     }
 
-    res.json({ message: "Venda (e cliente, se sem outras vendas) excluída com sucesso." });
+    res.json({
+      message: "Venda (e cliente, se sem outras vendas) excluída com sucesso.",
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erro ao excluir venda/cliente." });
@@ -352,7 +397,7 @@ app.delete("/api/vendas/:id/excluir-cliente", autenticar, async (req, res) => {
 // Gera PDF de ganhos filtrado por mês e ano
 app.get("/api/relatorio-ganhos", autenticar, async (req, res) => {
   try {
-    const mes = Number(req.query.mes);   // 1-12
+    const mes = Number(req.query.mes); // 1-12
     const ano = Number(req.query.ano);
 
     if (!mes || !ano) {
@@ -362,13 +407,15 @@ app.get("/api/relatorio-ganhos", autenticar, async (req, res) => {
     // Busca vendas filtrando por usuário se não for admin
     let query = supabase
       .from("registros_vendas")
-      .select(`
+      .select(
+        `
         id,
         valor_total,
         data_venda,
         usuarios!inner(nome),
         clientes!inner(nome)
-      `)
+      `
+      )
       .order("data_venda", { ascending: true });
 
     if (req.usuario.tipo_usuario !== "admin") {
@@ -379,7 +426,7 @@ app.get("/api/relatorio-ganhos", autenticar, async (req, res) => {
     if (error) throw error;
 
     // Filtra vendas pelo mês e ano
-    const vendasFiltradas = vendas.filter(v => {
+    const vendasFiltradas = vendas.filter((v) => {
       const data = new Date(v.data_venda);
       return data.getMonth() + 1 === mes && data.getFullYear() === ano;
     });
@@ -387,7 +434,7 @@ app.get("/api/relatorio-ganhos", autenticar, async (req, res) => {
     // Cria PDF
     const PDFDocument = require("pdfkit");
     const doc = new PDFDocument({ margin: 50 });
-    
+
     let filename = `Relatorio_Ganhos_${mes}_${ano}.pdf`;
     filename = encodeURIComponent(filename);
 
@@ -397,7 +444,9 @@ app.get("/api/relatorio-ganhos", autenticar, async (req, res) => {
     // Cabeçalho
     doc.fontSize(18).text("Barbearia Lucão", { align: "center" });
     doc.moveDown();
-    doc.fontSize(14).text(`Relatório de Ganhos - ${mes}/${ano}`, { align: "center" });
+    doc
+      .fontSize(14)
+      .text(`Relatório de Ganhos - ${mes}/${ano}`, { align: "center" });
     doc.moveDown();
 
     // Tabela
@@ -413,24 +462,24 @@ app.get("/api/relatorio-ganhos", autenticar, async (req, res) => {
       totalGeral += Number(v.valor_total);
 
       doc.text(
-        `${index + 1}. ${dataBR} - ${nomeCliente} - ${nomeUsuario} - R$ ${valor}`
+        `${
+          index + 1
+        }. ${dataBR} - ${nomeCliente} - ${nomeUsuario} - R$ ${valor}`
       );
     });
 
     doc.moveDown();
-    doc.fontSize(14).text(`Total Geral: R$ ${totalGeral.toFixed(2)}`, { align: "right" });
+    doc
+      .fontSize(14)
+      .text(`Total Geral: R$ ${totalGeral.toFixed(2)}`, { align: "right" });
 
     doc.end();
     doc.pipe(res);
-
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erro ao gerar relatório." });
   }
 });
-
-
-
 
 // --- 7. INICIALIZAÇÃO DO SERVIDOR ---
 app.listen(PORT, () => {
