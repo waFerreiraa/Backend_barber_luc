@@ -481,6 +481,12 @@ app.get("/api/relatorio-ganhos", autenticar, async (req, res) => {
   }
 });
 
+// Rota para manter a instância acordada
+app.get("/health", (req, res) => {
+  res.status(200).json({ status: "ok" });
+});
+
+
 // --- 7. INICIALIZAÇÃO DO SERVIDOR ---
 app.listen(PORT, () => {
   console.log(`🚀 Servidor rodando na porta ${PORT}`);
