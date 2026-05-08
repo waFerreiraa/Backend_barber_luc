@@ -7,6 +7,7 @@ import vendaRoutes from "./vendaRoutes.js";
 import sumarioRoutes from "./sumarioRoutes.js";
 import relatorioRoutes from "./relatorioRoutes.js";
 import historicoRoutes from "./historicoRoutes.js";
+import registroRoutes from "./registrosRoutes.js";
 
 const router = Router();
 
@@ -17,5 +18,6 @@ router.use(vendaRoutes);
 router.use(sumarioRoutes);
 router.use(relatorioRoutes);
 router.use(historicoRoutes);
+router.use(registroRoutes);
 
 export default router;
