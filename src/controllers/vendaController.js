@@ -3,6 +3,7 @@ import { brasiliaISOString } from "../utils/dateUtils.js";
 
 export async function registrarVenda(req, res) {
   const { cliente_id, valor_total, itens, client_reference } = req.body;
+  const { forma_pagamento } = req.body; // Adiciona a forma de pagamento
 
   // validações básicas
   if (
@@ -21,6 +22,16 @@ export async function registrarVenda(req, res) {
   if (!Number.isFinite(valorNum) || valorNum <= 0) {
     return res.status(400).json({ error: "valor_total inválido." });
   }
+
+  // Validação da forma de pagamento (já sabemos que existe por causa da validação acima)
+  const formasValidas = ["Pix", "Dinheiro", "Cartao de Credito", "Cartao de Debito"];
+  // Se forma_pagamento for fornecida, ela deve ser válida. Se não for, é opcional.
+  if (forma_pagamento && !formasValidas.includes(forma_pagamento)) {
+    return res.status(400).json({ error: "Forma de pagamento inválida ou não fornecida." });
+  }
+
+  // Garante que se a forma_pagamento for uma string vazia, ela seja salva como null
+  const formaPagamentoFinal = forma_pagamento || null;
 
   for (const it of itens) {
     if (
@@ -113,6 +124,7 @@ export async function registrarVenda(req, res) {
       valor_total: valorNum,
       data_venda: dataVenda,
       empresa_id: empresaId,
+      forma_pagamento: formaPagamentoFinal, // Salva a forma de pagamento (pode ser null)
       ...(client_reference ? { client_reference } : {}),
     };
 
