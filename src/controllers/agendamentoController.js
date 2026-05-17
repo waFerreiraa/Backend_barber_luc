@@ -111,7 +111,12 @@ export async function criarAgendamento(req, res) {
       return res.status(400).json({ error: "ID do barbeiro inválido." });
     }
 
-    const inicio = new Date(data_hora_inicio);
+    // FIX: Trata a data de entrada como sendo do fuso de Brasília (UTC-3)
+    // Isso garante que "15:00" seja salvo como 15:00 de Brasília, não importa o fuso do servidor.
+    const inicio = new Date(`${data_hora_inicio}-03:00`);
+    if (isNaN(inicio.getTime())) {
+      return res.status(400).json({ error: "Formato de data/hora inválido." });
+    }
     const fim = new Date(inicio.getTime() + duracao * 60 * 1000);
 
     // 2. Verificar conflito de horário para o barbeiro
@@ -188,7 +193,12 @@ export async function atualizarAgendamento(req, res) {
     // Se data_hora_inicio for fornecida, recalcula o fim
     // Caso contrário, mantém o fim existente (ou assume que a duração não mudou)
 
-    const inicio = data_hora_inicio ? new Date(data_hora_inicio) : null;
+    // FIX: Trata a data de entrada como sendo do fuso de Brasília (UTC-3)
+    const inicio = data_hora_inicio ? new Date(`${data_hora_inicio}-03:00`) : null;
+    if (data_hora_inicio && isNaN(inicio.getTime())) {
+      return res.status(400).json({ error: "Formato de data/hora inválido." });
+    }
+
     const fim = inicio ? new Date(inicio.getTime() + duracao * 60 * 1000) : null;
 
     // Verificar conflito de horário se data/hora ou barbeiro for alterado
