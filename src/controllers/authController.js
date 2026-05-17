@@ -103,3 +103,30 @@ export async function login(req, res) {
     return res.status(500).json({ error: "Erro ao tentar logar" });
   }
 }
+
+// NOVO: Listar colaboradores (barbeiros) para agendamento
+export async function listarColaboradores(req, res) {
+  try {
+    const empresaId = req.usuario?.empresa_id;
+    if (!empresaId) {
+      return res.status(401).json({ error: "Token inválido ou sem empresa_id." });
+    }
+
+    // Busca usuários que são 'colaborador' ou 'admin' na mesma empresa
+    const { data: usuarios, error } = await supabase
+      .from("usuarios")
+      .select("id, nome, tipo_usuario")
+      .eq("empresa_id", empresaId)
+      .in("tipo_usuario", ["colaborador", "admin"]) // Apenas colaboradores e admins podem ser barbeiros
+      .order("nome", { ascending: true });
+
+    if (error) throw error;
+
+    return res.json(usuarios);
+  } catch (error) {
+    console.error("Erro ao listar colaboradores:", error);
+    return res
+      .status(500)
+      .json({ error: "Erro ao listar colaboradores para agendamento." });
+  }
+}

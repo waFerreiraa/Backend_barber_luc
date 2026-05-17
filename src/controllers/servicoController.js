@@ -17,20 +17,27 @@ export async function listarServicos(req, res) {
 }
 
 export async function criarServico(req, res) {
-  const { nome, valor_padrao } = req.body;
+  const { nome, valor_padrao} = req.body; // Adicionado duracao_minutos
 
   if (!nome || !valor_padrao) {
     return res.status(400).json({ error: "Nome e valor são obrigatórios" });
   }
 
   try {
+    // Validação para duracao_minutos (opcional, default 30)
+    // FIX: Converte o valor para número e valida
+    const valorNumerico = parseFloat(valor_padrao);
+    if (isNaN(valorNumerico) || valorNumerico < 0) {
+      return res.status(400).json({ error: "Valor do serviço inválido. Deve ser um número positivo." });
+    }
+
     const { data, error } = await supabase
       .from("tipos_servicos")
       .insert([
         {
           nome,
-          valor_padrao,
-          empresa_id: req.usuario.empresa_id, // 🔐 obrigatório
+          valor_padrao: valorNumerico,
+          empresa_id: req.usuario.empresa_id // 🔐 obrigatório
         },
       ])
       .select();
@@ -39,6 +46,7 @@ export async function criarServico(req, res) {
 
     res.status(201).json(data[0]);
   } catch (error) {
+    console.error("Erro ao adicionar serviço:", error); // Adiciona log para depuração
     res.status(500).json({ error: "Erro ao adicionar serviço." });
   }
 }
@@ -47,16 +55,17 @@ export async function criarServico(req, res) {
 export async function atualizarServico(req, res) {
   const servicoId = req.params.id;
   const { nome, valor_padrao } = req.body;
-
+  
   if (!servicoId || !nome || !valor_padrao) {
     return res.status(400).json({ error: "ID do serviço, nome e valor são obrigatórios." });
   }
 
   try {
     const empresaId = req.usuario.empresa_id;
+    // Validação para duracao_minutos (opcional, default 30)
 
     const { data, error } = await supabase
-      .from("tipos_servicos")
+      .from("tipos_servicos") // Adicionado duracao_minutos para atualização
       .update({ nome, valor_padrao })
       .eq("id", servicoId)
       .eq("empresa_id", empresaId) // Garante que só pode editar serviços da própria empresa

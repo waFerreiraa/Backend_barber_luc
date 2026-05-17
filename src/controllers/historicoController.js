@@ -42,6 +42,7 @@ export async function buscarHistorico(req, res) {
     return res.json(vendasFormatadas);
   } catch (err) {
     console.error(err);
+    console.error("Erro ao buscar histórico no Supabase:", err); // Log mais detalhado
     return res.status(500).json({ error: "Erro ao buscar histórico." });
   }
 }
