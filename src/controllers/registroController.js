@@ -9,10 +9,10 @@ const JWT_EXPIRES_IN = "30d"; // ajuste conforme desejar
 
 export async function registroInicial(req, res) {
   try {
-    const { empresa_nome, nome, email, senha } = req.body;
+    const { empresa_nome, nome, email, senha, layout_tipo } = req.body;
 
     // validação simples
-    if (!empresa_nome || !nome || !email || !senha) {
+    if (!empresa_nome || !nome || !email || !senha || !layout_tipo) {
       return res.status(400).json({ error: "Todos os campos são obrigatórios." });
     }
 
@@ -45,6 +45,23 @@ export async function registroInicial(req, res) {
 
     const empresaId = empresaData.id;
 
+    // ✅ NOVO: Criar a configuração da empresa com o tipo de layout
+    const { error: configError } = await supabase
+      .from("empresa_configuracoes")
+      .insert([{
+        empresa_id: empresaId,
+        nome_exibicao: empresa_nome,
+        layout_tipo: layout_tipo || 'barbearia', // Garante um padrão
+      }]);
+
+    if (configError) {
+      console.error("Erro ao criar configuração da empresa:", configError);
+      // Cleanup: remove a empresa recém-criada se a configuração falhar
+      await supabase.from("empresas").delete().eq("id", empresaId);
+      return res.status(500).json({ error: "Erro ao configurar a empresa." });
+    }
+
+
     // 2) criar usuário admin vinculado
     const salt = await bcrypt.genSalt(10);
     const hashed = await bcrypt.hash(senha, salt);
@@ -70,6 +87,7 @@ export async function registroInicial(req, res) {
       // cleanup: remover empresa criada para não deixar órfãos
       try {
         await supabase.from("empresas").delete().eq("id", empresaId);
+        // A configuração será removida em cascata pelo 'ON DELETE CASCADE' no banco
       } catch (cleanupErr) {
         console.error("Erro no cleanup empresa:", cleanupErr);
       }

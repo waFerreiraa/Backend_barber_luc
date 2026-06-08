@@ -86,10 +86,10 @@ export async function listarAgendamentos(req, res) {
 export async function criarAgendamento(req, res) {
   const { cliente_nome, usuario_id: raw_usuario_id, servico_nome, servico_duracao_minutos, data_hora_inicio, observacoes } = req.body;
 
-  if (!cliente_nome || !raw_usuario_id || !servico_nome || !servico_duracao_minutos || !data_hora_inicio) {
+  if (!cliente_nome || !servico_nome || !servico_duracao_minutos || !data_hora_inicio) {
     return res
       .status(400)
-      .json({ error: "Nome do cliente, barbeiro, nome do serviço, duração do serviço e data/hora são obrigatórios." });
+      .json({ error: "Nome do cliente, nome do serviço, duração do serviço e data/hora são obrigatórios." });
   }
 
   try {
@@ -106,8 +106,8 @@ export async function criarAgendamento(req, res) {
       return res.status(400).json({ error: "Duração do serviço inválida. Deve ser um número inteiro positivo." });
     }
 
-    const usuario_id = Number(raw_usuario_id); // Converte para número
-    if (isNaN(usuario_id) || usuario_id <= 0) {
+    const usuario_id = raw_usuario_id ? Number(raw_usuario_id) : req.usuario.id; // Usa usuário autenticado como fallback
+    if (raw_usuario_id && (isNaN(usuario_id) || usuario_id <= 0)) {
       return res.status(400).json({ error: "ID do barbeiro inválido." });
     }
 
@@ -119,19 +119,20 @@ export async function criarAgendamento(req, res) {
     }
     const fim = new Date(inicio.getTime() + duracao * 60 * 1000);
 
-    // 2. Verificar conflito de horário para o barbeiro
-    // Usa o usuario_id já convertido para número
-    const temConflito = await verificarConflitoDeHorario(
-      usuario_id,
-      empresaId,
-      inicio.toISOString(),
-      fim.toISOString(),
-    );
+    // 2. Verificar conflito de horário para o barbeiro, se selecionado
+    if (usuario_id) {
+      const temConflito = await verificarConflitoDeHorario(
+        usuario_id,
+        empresaId,
+        inicio.toISOString(),
+        fim.toISOString(),
+      );
 
-    if (temConflito) {
-      return res
-        .status(409)
-        .json({ error: "O barbeiro já tem um agendamento neste horário." });
+      if (temConflito) {
+        return res
+          .status(409)
+          .json({ error: "O barbeiro já tem um agendamento neste horário." });
+      }
     }
 
     // 3. Criar agendamento
@@ -140,7 +141,7 @@ export async function criarAgendamento(req, res) {
       .insert([
         {
           cliente_nome,
-          usuario_id, // Usa o usuario_id já convertido para número
+          usuario_id,
           servico_nome,
           servico_duracao_minutos: duracao,
           empresa_id: empresaId,
@@ -178,8 +179,8 @@ export async function atualizarAgendamento(req, res) {
         .json({ error: "Token inválido ou sem empresa_id." });
     }
 
-    const usuario_id = Number(raw_usuario_id); // Converte para número
-    if (isNaN(usuario_id) || usuario_id <= 0) {
+    const usuario_id = raw_usuario_id ? Number(raw_usuario_id) : req.usuario.id; // Usa usuário autenticado como fallback
+    if (raw_usuario_id && (isNaN(usuario_id) || usuario_id <= 0)) {
       return res.status(400).json({ error: "ID do barbeiro inválido." });
     }
 

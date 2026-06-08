@@ -24,7 +24,7 @@ export async function registrarVenda(req, res) {
   }
 
   // Validação da forma de pagamento (já sabemos que existe por causa da validação acima)
-  const formasValidas = ["Pix", "Dinheiro", "Cartao de Credito", "Cartao de Debito"];
+  const formasValidas = ["Pix", "Dinheiro", "Credito", "Debito"];
   // Se forma_pagamento for fornecida, ela deve ser válida. Se não for, é opcional.
   if (forma_pagamento && !formasValidas.includes(forma_pagamento)) {
     return res.status(400).json({ error: "Forma de pagamento inválida ou não fornecida." });
@@ -181,6 +181,44 @@ export async function registrarVenda(req, res) {
   }
 }
 
+export async function listarVendas(req, res) {
+  try {
+    const empresaId = req.usuario?.empresa_id;
+    if (!empresaId) {
+      return res.status(401).json({ error: "Token inválido ou sem empresa_id." });
+    }
+
+    // A query para o histórico de vendas, agora incluindo forma_pagamento
+    const { data, error } = await supabase
+      .from("registros_vendas")
+      .select(`
+        id,
+        cliente_id,
+        cliente_nome,
+        valor_total,
+        data_venda,
+        forma_pagamento, 
+        usuario_id,
+        usuarios ( nome )
+      `)
+      .eq("empresa_id", empresaId)
+      .order("data_venda", { ascending: false });
+
+    if (error) throw error;
+
+    // Transforma os dados para corresponder à expectativa do frontend (v.usuario_nome)
+    const resultado = data.map(venda => ({
+      ...venda,
+      usuario_nome: venda.usuarios?.nome
+    }));
+
+    res.json(resultado);
+  } catch (error) {
+    console.error("Erro ao buscar histórico de vendas:", error);
+    res.status(500).json({ error: "Erro ao buscar histórico de vendas." });
+  }
+}
+
 export async function excluirVenda(req, res) {
   try {
     const vendaId = Number(req.params.id);
@@ -195,40 +233,26 @@ export async function excluirVenda(req, res) {
         .json({ error: "Token inválido ou sem empresa_id." });
     }
 
-    // verifica se a venda pertence à empresa
-    const { data: venda, error: vendaErr } = await supabase
-      .from("registros_vendas")
-      .select("id")
-      .eq("id", vendaId)
-      .eq("empresa_id", empresaId)
-      .single();
-
-    if (vendaErr || !venda) {
-      return res.status(404).json({ error: "Venda não encontrada." });
-    }
-
-    // deleta itens relacionados (cleanup)
-    const { error: delItensErr } = await supabase
-      .from("venda_itens")
-      .delete()
-      .eq("venda_id", vendaId)
-      .eq("empresa_id", empresaId);
-
-    if (delItensErr) {
-      console.error("Erro deletando itens da venda:", delItensErr);
-      // prosseguir tentando deletar a venda mesmo assim
-    }
-
-    // deleta a venda
-    const { error: delVendaErr } = await supabase
+    // Ao configurar a chave estrangeira `venda_itens.venda_id` com `ON DELETE CASCADE`,
+    // o banco de dados remove os itens automaticamente ao excluir a venda.
+    // Isso simplifica o código, melhora a performance (1 chamada ao DB em vez de 3)
+    // e garante a consistência dos dados.
+    // A chamada .select() após .delete() retorna os registros excluídos.
+    const { data, error } = await supabase
       .from("registros_vendas")
       .delete()
       .eq("id", vendaId)
-      .eq("empresa_id", empresaId);
+      .eq("empresa_id", empresaId) // Garante que só pode excluir da própria empresa
+      .select();
 
-    if (delVendaErr) {
-      console.error("Erro deletando venda:", delVendaErr);
-      return res.status(500).json({ error: "Erro ao deletar venda." });
+    if (error) {
+      console.error("Erro ao excluir venda:", error);
+      return res.status(500).json({ error: "Erro ao excluir a venda." });
+    }
+
+    // Se 'data' estiver vazio, o registro não foi encontrado (ou não pertence à empresa)
+    if (!data || data.length === 0) {
+      return res.status(404).json({ error: "Venda não encontrada ou não pertence à sua empresa." });
     }
 
     return res.status(200).json({ message: "Venda excluída com sucesso." });
