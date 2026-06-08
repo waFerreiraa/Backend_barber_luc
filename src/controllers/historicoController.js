@@ -11,6 +11,7 @@ export async function buscarHistorico(req, res) {
         id,
         valor_total,
         data_venda,
+        forma_pagamento,
         usuario_id,
         empresa_id,
         usuarios!inner(nome),

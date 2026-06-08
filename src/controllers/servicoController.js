@@ -47,7 +47,11 @@ export async function criarServico(req, res) {
     res.status(201).json(data[0]);
   } catch (error) {
     console.error("Erro ao adicionar serviço:", error); // Adiciona log para depuração
-    res.status(500).json({ error: "Erro ao adicionar serviço." });
+    // ✅ NOVO: Trata o erro de nome duplicado (código '23505' para unique violation)
+    if (error.code === '23505') {
+      return res.status(409).json({ error: `O serviço com o nome "${nome}" já existe.` });
+    }
+    res.status(500).json({ error: "Erro interno ao adicionar serviço." });
   }
 }
 
@@ -62,11 +66,17 @@ export async function atualizarServico(req, res) {
 
   try {
     const empresaId = req.usuario.empresa_id;
-    // Validação para duracao_minutos (opcional, default 30)
+    
+    // Sugestão: Adicionar a mesma validação de valor que existe na criação
+    const valorNumerico = parseFloat(valor_padrao);
+    if (isNaN(valorNumerico) || valorNumerico < 0) {
+      return res.status(400).json({ error: "Valor do serviço inválido. Deve ser um número positivo." });
+    }
 
     const { data, error } = await supabase
-      .from("tipos_servicos") // Adicionado duracao_minutos para atualização
-      .update({ nome, valor_padrao })
+      .from("tipos_servicos")
+      // Garante que o valor salvo no banco seja sempre um número
+      .update({ nome, valor_padrao: valorNumerico })
       .eq("id", servicoId)
       .eq("empresa_id", empresaId) // Garante que só pode editar serviços da própria empresa
       .select()
@@ -80,7 +90,11 @@ export async function atualizarServico(req, res) {
     res.json(data);
   } catch (error) {
     console.error("Erro ao atualizar serviço:", error);
-    res.status(500).json({ error: "Erro ao atualizar serviço." });
+    // ✅ NOVO: Trata o erro de nome duplicado
+    if (error.code === '23505') {
+      return res.status(409).json({ error: `O serviço com o nome "${nome}" já existe.` });
+    }
+    res.status(500).json({ error: "Erro interno ao atualizar serviço." });
   }
 }
 
@@ -95,26 +109,20 @@ export async function excluirServico(req, res) {
   try {
     const empresaId = req.usuario.empresa_id;
 
-    // Primeiro, verificar se o serviço existe e pertence à empresa
-    const { data: existingService, error: fetchError } = await supabase
-      .from("tipos_servicos")
-      .select("id")
-      .eq("id", servicoId)
-      .eq("empresa_id", empresaId)
-      .single();
-
-    if (fetchError || !existingService) {
-      return res.status(404).json({ error: "Serviço não encontrado ou não pertence à sua empresa." });
-    }
-
-    // Se não estiver em uso, pode excluir
-    const { error } = await supabase
+    // Sugestão: Unificar a exclusão e verificação em uma única chamada
+    const { data, error } = await supabase
       .from("tipos_servicos")
       .delete()
       .eq("id", servicoId)
-      .eq("empresa_id", empresaId); // Garante que só pode excluir serviços da própria empresa
+      .eq("empresa_id", empresaId) // Garante que só pode excluir serviços da própria empresa
+      .select(); // .select() retorna os itens deletados
 
     if (error) throw error;
+
+    // Se 'data' estiver vazio, significa que nenhum registro correspondeu aos critérios (id e empresa_id)
+    if (!data || data.length === 0) {
+      return res.status(404).json({ error: "Serviço não encontrado ou não pertence à sua empresa." });
+    }
 
     res.status(204).send(); // 204 No Content para exclusão bem-sucedida
   } catch (error) {

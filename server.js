@@ -11,7 +11,6 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ✅ suas rotas já têm /api/... dentro de cada arquivo
 app.use('/api',routes);
 
 app.get("/health", (req, res) => {

@@ -52,8 +52,9 @@ export function verificarAdmin(req, res, next) {
     return res.status(401).json({ error: "Usuário não autenticado" });
   }
 
-  if (req.usuario.tipo_usuario !== "admin") {
-    return res.status(403).json({ error: "Acesso negado" });
+  // ✅ Permite que 'dono' e 'admin' realizem ações administrativas
+  if (req.usuario.tipo_usuario !== "admin" && req.usuario.tipo_usuario !== "dono") {
+    return res.status(403).json({ error: "Acesso negado. Permissão de administrador necessária." });
   }
 
   return next();
