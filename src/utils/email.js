@@ -19,6 +19,10 @@ const transporter = nodemailer.createTransport({
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
+  // Configurações de Timeout (10 segundos)
+  connectionTimeout: 10000,
+  greetingTimeout: 10000,
+  socketTimeout: 10000,
 });
 
 export const sendPasswordResetEmail = async (to, token, fromName = "Sua Barbearia") => {
@@ -34,5 +38,13 @@ export const sendPasswordResetEmail = async (to, token, fromName = "Sua Barbeari
     html: `<p>Você solicitou uma redefinição de senha.</p><p>Clique neste <a href="${resetUrl}">link</a> para criar uma nova senha.</p><p>Este link expira em 1 hora.</p>`,
   };
 
-  await transporter.sendMail(mailOptions);
+  try {
+    console.log(`[Email] Tentando enviar e-mail de reset de senha para: ${to}`);
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`[Email] Sucesso! E-mail enviado: ${info.messageId}`);
+  } catch (error) {
+    console.error(`[Email] Falha ao enviar e-mail para ${to}:`, error.message);
+    // Repassa o erro para que o authController possa lidar com ele (embora atualmente ele capture e retorne 500 generico).
+    throw new Error(`Falha ao enviar e-mail: ${error.message}`);
+  }
 };
